@@ -1,5 +1,4 @@
-# Lab-assignments
-SPSS syntax codes to lab assignments in SIMM32
+# Lab-assignment-#2
 
 
 DATASET ACTIVATE DataSet1.
