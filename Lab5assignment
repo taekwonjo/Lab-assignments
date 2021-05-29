@@ -1,0 +1,80 @@
+DATASET ACTIVATE DataSet1.
+COMPUTE cortisol_sum=cortisol_serum + cortisol_saliva.
+EXECUTE.
+
+SPSSINC CREATE DUMMIES VARIABLE=sex 
+ROOTNAME1=female_dummy 
+/OPTIONS ORDER=A USEVALUELABELS=YES USEML=YES OMITFIRST=NO.
+
+VARSTOCASES
+  /MAKE trans1 FROM pain1 pain2 pain3 pain4
+  /INDEX=time(4) 
+  /KEEP=ID age STAI_trait pain_cat mindfulness female_dummy_1 cortisol_sum
+  /NULL=KEEP.
+
+*Changed the restructured variable into "pain"
+    
+
+
+MIXED pain WITH age STAI_trait pain_cat mindfulness female_dummy_1 cortisol_sum time
+  /CRITERIA=DFMETHOD(SATTERTHWAITE) CIN(95) MXITER(100) MXSTEP(10) SCORING(1) 
+    SINGULAR(0.000000000001) HCONVERGE(0, ABSOLUTE) LCONVERGE(0, ABSOLUTE) PCONVERGE(0.000001, ABSOLUTE)    
+  /FIXED=age STAI_trait pain_cat mindfulness female_dummy_1 cortisol_sum time | SSTYPE(3)
+  /METHOD=REML
+  /PRINT=SOLUTION
+  /RANDOM=INTERCEPT | SUBJECT(ID) COVTYPE(VC)
+  /SAVE=PRED.
+
+MIXED pain WITH age STAI_trait pain_cat mindfulness female_dummy_1 cortisol_sum time
+  /CRITERIA=DFMETHOD(SATTERTHWAITE) CIN(95) MXITER(100) MXSTEP(10) SCORING(1) 
+    SINGULAR(0.000000000001) HCONVERGE(0, ABSOLUTE) LCONVERGE(0, ABSOLUTE) PCONVERGE(0.000001, ABSOLUTE)    
+  /FIXED=age STAI_trait pain_cat mindfulness female_dummy_1 cortisol_sum time | SSTYPE(3)
+  /METHOD=REML
+  /PRINT=CORB  SOLUTION
+  /RANDOM=INTERCEPT time | SUBJECT(ID) COVTYPE(UN)
+  /SAVE=PRED.
+
+COMPUTE time_centered=time - 2.5.
+EXECUTE.
+
+COMPUTE time_centered_sq=time_centered * time_centered.
+EXECUTE.
+
+MIXED pain WITH age STAI_trait pain_cat mindfulness female_dummy_1 cortisol_sum time_centered 
+    time_centered_sq
+  /CRITERIA=DFMETHOD(SATTERTHWAITE) CIN(95) MXITER(100) MXSTEP(10) SCORING(1) 
+    SINGULAR(0.000000000001) HCONVERGE(0, ABSOLUTE) LCONVERGE(0, ABSOLUTE) PCONVERGE(0.000001, ABSOLUTE)    
+  /FIXED=age STAI_trait pain_cat mindfulness female_dummy_1 cortisol_sum time_centered 
+    time_centered_sq | SSTYPE(3)
+  /METHOD=REML
+  /PRINT=CORB  SOLUTION
+  /RANDOM=INTERCEPT | SUBJECT(ID) COVTYPE(VC)
+  /SAVE=PRED.
+
+VARSTOCASES
+  /MAKE pain FROM pain pred_int pred_slope pred_sq
+  /INDEX=obs_pred(pain) 
+  /KEEP=ID time
+  /NULL=KEEP.
+
+
+SORT CASES  BY ID.
+SPLIT FILE SEPARATE BY ID.
+
+* Chart Builder.
+GGRAPH
+  /GRAPHDATASET NAME="graphdataset" VARIABLES=time MEAN(pain)[name="MEAN_pain"] obs_pred 
+    MISSING=LISTWISE REPORTMISSING=NO
+  /GRAPHSPEC SOURCE=INLINE.
+BEGIN GPL
+  SOURCE: s=userSource(id("graphdataset"))
+  DATA: time=col(source(s), name("time"), unit.category())
+  DATA: MEAN_pain=col(source(s), name("MEAN_pain"))
+  DATA: obs_pred=col(source(s), name("obs_pred"), unit.category())
+  GUIDE: axis(dim(1), label("time"))
+  GUIDE: axis(dim(2), label("Mean pain"))
+  GUIDE: legend(aesthetic(aesthetic.color.interior), label("obs_pred"))
+  GUIDE: text.title(label("Multiple Line Mean of pain by time by obs_pred"))
+  SCALE: linear(dim(2), include(0))
+  ELEMENT: line(position(time*MEAN_pain), color.interior(obs_pred), missing.wings())
+END GPL.
