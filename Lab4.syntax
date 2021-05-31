@@ -1,0 +1,89 @@
+DATASET ACTIVATE DataSet1.
+RECODE sex ('male'=0) ('female'=1) (ELSE=SYSMIS) INTO female_dummy.
+EXECUTE.
+
+COMPUTE cortisol_sum=cortisol_serum + cortisol_saliva.
+EXECUTE.
+
+COMPUTE pain_cat_new=pain_cat - 18.
+EXECUTE.
+
+DATASET ACTIVATE DataSet1.
+COMPUTE stai_trait_new=STAI_trait - 27.
+EXECUTE.
+
+MIXED pain WITH age female_dummy cortisol_sum pain_cat_new stai_trait_new mindfulness
+  /CRITERIA=DFMETHOD(SATTERTHWAITE) CIN(95) MXITER(100) MXSTEP(10) SCORING(1) 
+    SINGULAR(0.000000000001) HCONVERGE(0, ABSOLUTE) LCONVERGE(0, ABSOLUTE) PCONVERGE(0.000001, ABSOLUTE)    
+  /FIXED=age female_dummy cortisol_sum pain_cat_new stai_trait_new mindfulness | SSTYPE(3)
+  /METHOD=REML
+  /PRINT=CORB  SOLUTION
+  /RANDOM=INTERCEPT | SUBJECT(hospital) COVTYPE(VC)
+  /SAVE=PRED.
+
+*building the null model
+
+
+MIXED pain WITH age female_dummy cortisol_sum pain_cat_new stai_trait_new mindfulness
+  /CRITERIA=DFMETHOD(SATTERTHWAITE) CIN(95) MXITER(100) MXSTEP(10) SCORING(1) 
+    SINGULAR(0.000000000001) HCONVERGE(0, ABSOLUTE) LCONVERGE(0, ABSOLUTE) PCONVERGE(0.000001, ABSOLUTE)    
+  /FIXED=| SSTYPE(3)
+  /METHOD=REML
+  /PRINT=CORB  SOLUTION
+  /RANDOM=INTERCEPT | SUBJECT(hospital) COVTYPE(VC).
+ 
+
+DESCRIPTIVES VARIABLES=PRED_1
+  /STATISTICS=MEAN STDDEV VARIANCE MIN MAX.
+
+* changed to dataset 2
+
+
+DATASET ACTIVATE DataSet2.
+RECODE sex ('male'=0) ('female'=1) (ELSE=SYSMIS) INTO female_dummy.
+EXECUTE.
+
+COMPUTE cortisol_sum=cortisol_serum + cortisol_saliva.
+EXECUTE.
+
+COMPUTE pain_cat_new=pain_cat - 18.
+EXECUTE.
+
+COMPUTE stai_trait_new=STAI_trait - 27.
+EXECUTE.
+
+COMPUTE model_pred=1.977 + (-0.008) * age + (-0.175) * female_dummy + 0.343 * cortisol_sum + 0.099 
+    * pain_cat_new + (-0.057) * stai_trait_new + (-0.169) * mindfulness.
+EXECUTE.
+
+* Now to calculate the observed R^2, I will need to find the RSS and TSS
+
+COMPUTE residuals=pain - model_pred.
+EXECUTE.
+
+COMPUTE residuals_sq=residuals * residuals.
+EXECUTE.
+
+DESCRIPTIVES VARIABLES=residuals_sq
+  /STATISTICS=MEAN SUM STDDEV MIN MAX.
+
+*RSS = 268.92
+
+DESCRIPTIVES VARIABLES=pain
+  /STATISTICS=MEAN SUM STDDEV MIN MAX.
+
+COMPUTE pred_mean=4.85.
+EXECUTE.
+
+COMPUTE res_mean=pain - 4.85.
+EXECUTE.
+
+COMPUTE res_mean_sq=res_mean * res_mean.
+EXECUTE.
+
+DESCRIPTIVES VARIABLES=res_mean_sq
+  /STATISTICS=MEAN SUM STDDEV MIN MAX.
+
+* TSS = 427.50
+    
+* Observed R^2 = 1-(RSS/TSS) = 1-(268.92/427.50) = 0.37
